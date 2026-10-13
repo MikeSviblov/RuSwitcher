@@ -1075,7 +1075,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let currentID = LayoutSwitcher.currentLayoutID()
         return LayoutSwitcher.installedLayouts().map { source in
             let id = LayoutSwitcher.sourceID(source)
-            let badge = LayoutSwitcher.languageCode(source).map(Self.flagBadge(forLanguage:))
+            let badge = Self.regionalFlag(forLayoutID: id) ?? LayoutSwitcher.languageCode(source).map(Self.flagBadge(forLanguage:))
             let title = [badge, LayoutSwitcher.sourceName(source)].compactMap { $0 }.joined(separator: " ")
             let item = NSMenuItem(title: title, action: #selector(selectLayout(_:)), keyEquivalent: "")
             item.target = self
@@ -1180,12 +1180,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Флаг текущей раскладки по коду языка (BCP-47), а не по подстроке в ID — иначе
     /// "Belarusian" ложно матчил "ru", а любая не-RU/EN пара показывалась как 🇺🇸.
     func flagForCurrentLayout() -> String {
+        if let regional = Self.regionalFlag(forLayoutID: LayoutSwitcher.currentLayoutID()) { return regional }
         guard let lang = LayoutSwitcher.currentLanguageCode()?.lowercased(), !lang.isEmpty else {
             // Язык раскладки недоступен — мягкий фолбэк по ID.
             let id = LayoutSwitcher.currentLayoutID().lowercased()
             return (id.contains("russian") || id.hasSuffix(".ru")) ? "🇷🇺" : "🇺🇸"
         }
         return Self.flagBadge(forLanguage: lang)
+    }
+
+    /// Флаг страны для региональных раскладок Apple. Язык у них общий (британская, австралийская
+    /// и US все отдают «en», бразильская — «pt»), поэтому по языку британская показывалась
+    /// флагом США. Страну берём из названия раскладки и только там, где она однозначна.
+    private static func regionalFlag(forLayoutID id: String) -> String? {
+        let prefix = "com.apple.keylayout."
+        guard id.hasPrefix(prefix) else { return nil }
+        let name = id.dropFirst(prefix.count)
+        let regions: [(String, String)] = [
+            ("British", "🇬🇧"), ("Australian", "🇦🇺"), ("Irish", "🇮🇪"), ("NewZealand", "🇳🇿"),
+            ("Canadian", "🇨🇦"), ("Brazilian", "🇧🇷"), ("Austrian", "🇦🇹"), ("Swiss", "🇨🇭"), ("Belgian", "🇧🇪"),
+        ]
+        return regions.first { name.hasPrefix($0.0) }?.1
     }
 
     /// Единый бейдж раскладки для иконки меню-бара и списка раскладок в меню:

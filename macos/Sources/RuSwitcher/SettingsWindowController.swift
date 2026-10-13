@@ -18,6 +18,7 @@ final class SettingsWindowController {
     private var hotkeyPopups: [HotkeySlot: NSPopUpButton] = [:]
     private var hotkeySidePopups: [HotkeySlot: NSPopUpButton] = [:]
     private var hotkeyDoubleChecks: [HotkeySlot: NSButton] = [:]
+    private var hotkeyTitleLabels: [HotkeySlot: NSTextField] = [:]
     private var exceptionEditors: [ExceptionListEditor] = []
     private var abbreviationEditor: AbbreviationEditor?
     private var freqPacksCheckbox: NSButton?
@@ -407,7 +408,8 @@ final class SettingsWindowController {
         ]
         for (index, group) in groups.enumerated() {
             let tag = HotkeySlot.allCases.firstIndex(of: group.slot) ?? 0
-            let label = NSTextField(labelWithString: group.title)
+            let label = NSTextField(labelWithString: hotkeyTitle(group.slot, base: group.title))
+            hotkeyTitleLabels[group.slot] = label
             label.frame = NSRect(x: 20, y: y, width: 150, height: 22)
             view.addSubview(label)
             let popup = NSPopUpButton(frame: NSRect(x: 175, y: y - 2, width: 255, height: 26))
@@ -457,6 +459,20 @@ final class SettingsWindowController {
         fitToText(view)
         item.view = topAligned(view)
         return item
+    }
+
+    /// «Всегда раскладка 1 (ABC)»: рядом с номером имя раскладки, чтобы не сверяться с
+    /// «Основными» (просьба kobygold, discussion #32).
+    private func hotkeyTitle(_ slot: HotkeySlot, base: String) -> String {
+        let n = slot == .layout1 ? 1 : (slot == .layout2 ? 2 : 0)
+        guard n > 0, let name = LayoutSwitcher.pairLayoutName(n) else { return base }
+        return "\(base) (\(name))"
+    }
+
+    /// Раскладку 1/2 сменили в «Основных» — подписи хоткеев должны показать новые имена.
+    private func refreshLayoutHotkeyTitles() {
+        hotkeyTitleLabels[.layout1]?.stringValue = hotkeyTitle(.layout1, base: L10n.settingsHotkeyLayout1)
+        hotkeyTitleLabels[.layout2]?.stringValue = hotkeyTitle(.layout2, base: L10n.settingsHotkeyLayout2)
     }
 
     /// Состояние всех контролов хоткеев по настройкам. Пункты, занятые хоткеем выше по
@@ -1052,11 +1068,13 @@ final class SettingsWindowController {
     @objc private func layout1Changed(_ sender: NSPopUpButton) {
         SettingsManager.shared.layout1ID = selectedLayoutID(from: sender)
         DynamicKeyMapping.clearCache()
+        refreshLayoutHotkeyTitles()
     }
 
     @objc private func layout2Changed(_ sender: NSPopUpButton) {
         SettingsManager.shared.layout2ID = selectedLayoutID(from: sender)
         DynamicKeyMapping.clearCache()
+        refreshLayoutHotkeyTitles()
     }
 
     @objc private func perAppLayoutChanged(_ sender: NSButton) {

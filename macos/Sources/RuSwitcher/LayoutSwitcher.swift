@@ -201,6 +201,16 @@ enum LayoutSwitcher {
         return (curLang, tgtLang)
     }
 
+    /// Имя раскладки 1 или 2 из пары (как в системе: «ABC», «Русская»), nil если не найдена.
+    static func pairLayoutName(_ n: Int) -> String? {
+        let settings = SettingsManager.shared
+        let sources = installedLayouts()
+        let id = n == 1
+            ? (settings.layout1ID.isEmpty ? autoDetectID1(from: sources) : settings.layout1ID)
+            : (settings.layout2ID.isEmpty ? autoDetectID2(from: sources) : settings.layout2ID)
+        return sources.first(where: { sourceID($0) == id }).map(sourceName)
+    }
+
     /// Языки пары раскладок, между которыми конвертируем (двухбуквенные коды).
     static func pairLanguages() -> [String] {
         let settings = SettingsManager.shared

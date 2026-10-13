@@ -123,13 +123,13 @@ To upgrade later: `brew upgrade --cask ruswitcher`.
 
 Grab the latest `.dmg` from [**ruswitcher.app**](https://ruswitcher.app/en/download/?utm_source=github&utm_medium=readme) or from [**Releases**](https://github.com/rashn/RuSwitcher/releases/latest), open it and drag RuSwitcher to Applications.
 
-**Build from source**
+**Build from source (for macOS)**
 
 ```bash
 git clone https://github.com/rashn/RuSwitcher.git
 cd RuSwitcher
-bash build_app.sh
-cp -R RuSwitcher.app /Applications/
+RS_SIGN_ID="-" ./macos/build_app.sh
+cp -R macos/RuSwitcher.app /Applications/
 ```
 
 Requires macOS 13+ and Xcode Command Line Tools.
@@ -177,7 +177,7 @@ Free code signing on Windows provided by [SignPath.io](https://about.signpath.io
 
 ### License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+[MIT](LICENSE) — free to use, modify, and distribute. The license covers the code; the RuSwitcher name and icon are not part of it, see [TRADEMARKS.md](TRADEMARKS.md).
 
 ---
 
@@ -322,4 +322,4 @@ cp -R RuSwitcher.app /Applications/
 
 ### Лицензия
 
-[MIT](LICENSE) — свободное использование, модификация и распространение.
+[MIT](LICENSE) — свободное использование, модификация и распространение. Лицензия относится к коду: название RuSwitcher и иконка в неё не входят, см. [TRADEMARKS.md](TRADEMARKS.md).

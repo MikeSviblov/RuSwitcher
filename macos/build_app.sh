@@ -31,6 +31,12 @@ echo "→ swift build $SWIFT_BUILD_FLAGS (universal)..."
 swift build $SWIFT_BUILD_FLAGS
 # shellcheck disable=SC2086
 BUILD_DIR=$(swift build --show-bin-path $SWIFT_BUILD_FLAGS 2>/dev/null)
+# Путь к продукту зависит от версии Swift (.build/apple/… до macOS 27, .build/out/… после),
+# поэтому спрашиваем его у самого swift — и останавливаемся, если ответа нет.
+if [ -z "$BUILD_DIR" ] || [ ! -f "$BUILD_DIR/$APP_NAME" ]; then
+    echo "✗ swift build не сообщил, где лежит собранный $APP_NAME (получено: '${BUILD_DIR:-пусто}')" >&2
+    exit 1
+fi
 
 # 2. Создаём .app bundle
 echo "→ Creating app bundle..."

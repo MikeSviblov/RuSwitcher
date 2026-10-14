@@ -143,7 +143,7 @@ enum DynamicKeyMapping {
     /// (',' = Shift+6 ↔ '^', '.' = Shift+7 ↔ '&', ';' ↔ '*', ':' ↔ '%') — без белого
     /// списка обратное направление давало бы «hello&» вместо «hello.». Список пропускает
     /// оба направления #33 ('?'↔',', '/'↔'.') и блокирует утечку в ^&*%/@#.
-    private static let plausibleTargetPunct = Set("?,.!;:…")
+    private static let plausibleTargetPunct = LayoutDetector.sentencePunctuation
 
     private static func punctApply(_ s: String, map: [Character: Character]) -> String {
         String(s.map { c in

@@ -624,7 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let plan = LayoutDetector.plan(typed: fullPair.original, converted: fullPair.converted,
                                                canSplit: fullPair.original.count == allKeys.count,
                                                currentLang: langs.current, otherLang: langs.opposite,
-                                               capsLock: capsLock)
+                                               capsLock: capsLock, suffixConvertible: !charOnly)
                 guard case .convert(let core) = plan else {
                     rslog("auto: len=\(fullPair.original.count) \(langs.current)/\(langs.opposite) plan=\(plan)")  // слова не логируем (приватность)
                     return nil
@@ -652,7 +652,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     isCandidateWord: { (pack?.contains($0) ?? true) && Dict.isValidWord($0, lang: cur) })
             },
             isDeniedWord: {
-                let core = LayoutDetector.splitTrailingPunctuation(fullPair.original).coreLength
+                let core = LayoutDetector.trailingCoreLength(typed: fullPair.original, converted: fullPair.converted,
+                                                             suffixConvertible: !charOnly)
                 return AutoSwitchPolicy.isDeniedWord(fullPair.original, fullPair.converted)
                     || AutoSwitchPolicy.isDeniedWord(String(fullPair.original.prefix(core)),
                                                      String(fullPair.converted.prefix(core)))

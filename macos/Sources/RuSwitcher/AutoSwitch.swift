@@ -223,14 +223,17 @@ enum LayoutDetector {
     /// спросить decide. typed/converted — полное слово; canSplit — инвариант «1 клавиша =
     /// 1 символ» (при слиянии графем хвост не трогаем). coreLength в .convert — сколько
     /// символов конвертировать; остальное возвращается в поле литералом.
+    /// suffixConvertible — хвост будет переведён сквозь пару (не так для текста, проброшенного
+    /// удалёнкой: там он остаётся литералом), см. trailingCoreLength.
     @MainActor
     static func plan(typed: String, converted: String, canSplit: Bool,
-                     currentLang: String, otherLang: String, capsLock: Bool) -> AutoPlan {
+                     currentLang: String, otherLang: String, capsLock: Bool,
+                     suffixConvertible: Bool = true) -> AutoPlan {
         let t = Array(typed), c = Array(converted)
         var coreLength = t.count
-        let split = splitTrailingPunctuation(typed)
-        if canSplit, !split.suffix.isEmpty, split.coreLength > 0, c.count == t.count {
-            coreLength = split.coreLength
+        let core = trailingCoreLength(typed: typed, converted: converted, suffixConvertible: suffixConvertible)
+        if canSplit, core < t.count, core > 0, c.count == t.count {
+            coreLength = core
             // Для пар с ивритом разбор не нужен: направление «в иврит» авто-путём не
             // конвертится by design, а ивритский словарь принимает любые буквы.
             if !isHebrew(otherLang), Dict.isAvailable(otherLang) {
@@ -274,10 +277,35 @@ enum LayoutDetector {
     /// Также ` [ ] — клавиши ё/х/ъ: отщепляем их с хвоста, чтобы тот же walk неоднозначности
     /// сработал симметрично (issue #22-скептик: иначе «ружьё»/«цех» шли бы мимо проверки).
     static func splitTrailingPunctuation(_ s: String) -> (coreLength: Int, suffix: String) {
-        let punct: Set<Character> = [",", ".", "!", "?", ";", ":", ")", "`", "[", "]"]
         var core = s[...]
-        while let last = core.last, punct.contains(last) { core = core.dropLast() }
+        while let last = core.last, trailingPunct.contains(last) { core = core.dropLast() }
         return (core.count, String(s.dropFirst(core.count)))
+    }
+
+    static let trailingPunct: Set<Character> = [",", ".", "!", "?", ";", ":", ")", "`", "[", "]"]
+
+    /// Знаки конца фразы, которые переводим сквозь пару раскладок (#33, #41); тот же список
+    /// ограничивает DynamicKeyMapping.punctApply.
+    static let sentencePunctuation: Set<Character> = Set("?,.!;:…")
+
+    /// Где кончается слово (#15, #41). С конца отщепляем знаки из trailingPunct и ещё символы,
+    /// на месте которых в целевой раскладке стоит знак конца фразы. На «Русской — ПК» Shift+6
+    /// («^» в английской) — двоеточие, на маковской «Русской» Shift+6 и Shift+7 («^», «&») —
+    /// запятая и точка: без этого «ntcn^» целиком шло в детектор как слово со странным
+    /// символом, и любое слово перед запятой или в конце фразы оставалось как есть. Второе
+    /// правило — только когда хвост будет переведён (suffixConvertible), иначе вышло бы «тест^».
+    /// Ту же длину ядра берёт проверка «Никогда не конвертировать».
+    static func trailingCoreLength(typed: String, converted: String, suffixConvertible: Bool) -> Int {
+        let t = Array(typed), c = Array(converted)
+        guard suffixConvertible, c.count == t.count else { return splitTrailingPunctuation(typed).coreLength }
+        var core = t.count
+        while core > 0 {
+            let ch = t[core - 1]
+            let symbol = !ch.isLetter && !ch.isNumber && (ch.isPunctuation || ch.isSymbol)
+            guard trailingPunct.contains(ch) || (symbol && sentencePunctuation.contains(c[core - 1])) else { break }
+            core -= 1
+        }
+        return core
     }
 
     /// Язык — иврит (BCP-47 `he` или устаревший `iw`). 3.0: гейт кросс-скрипт-детекта.

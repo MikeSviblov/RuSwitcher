@@ -301,7 +301,9 @@ enum LayoutDetector {
         var core = t.count
         while core > 0 {
             let ch = t[core - 1]
-            let symbol = !ch.isLetter && !ch.isNumber && (ch.isPunctuation || ch.isSymbol)
+            // @ и # не трогаем, как и в trailingPunct: почта, теги (на испанской и болгарской
+            // парах на их клавишах стоят «!» и «?»).
+            let symbol = !ch.isLetter && !ch.isNumber && (ch.isPunctuation || ch.isSymbol) && ch != "@" && ch != "#"
             guard trailingPunct.contains(ch) || (symbol && sentencePunctuation.contains(c[core - 1])) else { break }
             core -= 1
         }

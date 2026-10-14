@@ -589,6 +589,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // на офисе раскладка может не соответствовать тому, что напечатали на контроллере,
         // и тогда decide ошибочно даёт keep (это и есть «авто в удалёнке не работает»).
         let charOnly = allKeys.allSatisfy { $0.char != nil }
+        // Хвост сквозь пару переводим только у своего ввода: проброшенный удалёнкой текст идёт
+        // литералом, а управляющая сторона (фокус в клиенте удалёнки) должна решать так же, как
+        // управляемая, иначе она переключит свою раскладку на слово, которое та не тронет (#41).
+        let remoteClient = settings.remoteDesktopMode && AutoSwitchPolicy.isRemoteDesktopClient(frontID)
+        let suffixConvertible = !charOnly && !remoteClient
         let langs: (current: String, opposite: String)
         if charOnly {
             let typedIsCyrillic = fullPair.original.unicodeScalars.contains { $0.value >= 0x0400 && $0.value <= 0x04FF }
@@ -624,7 +629,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let plan = LayoutDetector.plan(typed: fullPair.original, converted: fullPair.converted,
                                                canSplit: fullPair.original.count == allKeys.count,
                                                currentLang: langs.current, otherLang: langs.opposite,
-                                               capsLock: capsLock, suffixConvertible: !charOnly)
+                                               capsLock: capsLock, suffixConvertible: suffixConvertible)
                 guard case .convert(let core) = plan else {
                     rslog("auto: len=\(fullPair.original.count) \(langs.current)/\(langs.opposite) plan=\(plan)")  // слова не логируем (приватность)
                     return nil
@@ -653,7 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             isDeniedWord: {
                 let core = LayoutDetector.trailingCoreLength(typed: fullPair.original, converted: fullPair.converted,
-                                                             suffixConvertible: !charOnly)
+                                                             suffixConvertible: suffixConvertible)
                 return AutoSwitchPolicy.isDeniedWord(fullPair.original, fullPair.converted)
                     || AutoSwitchPolicy.isDeniedWord(String(fullPair.original.prefix(core)),
                                                      String(fullPair.converted.prefix(core)))
@@ -788,7 +793,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let coreKeys = suffix.isEmpty ? ctx.keys : Array(ctx.keys.prefix(core))
             guard let pair = suffix.isEmpty ? ctx.pair : DynamicKeyMapping.convertKeys(coreKeys),
                   !AutoSwitchPolicy.isDeniedWord(pair.original, pair.converted) else { return false }
-            insert = (fixedCore ?? pair.converted) + DynamicKeyMapping.punctThroughCurrentPair(suffix)
+            // Проброшенный удалёнкой текст: хвост литералом, как в performAutoConvert (скептик #33).
+            let tail = coreKeys.allSatisfy({ $0.char != nil }) ? suffix : DynamicKeyMapping.punctThroughCurrentPair(suffix)
+            insert = (fixedCore ?? pair.converted) + tail
             switchLayout = true
         }
         rslog("wordEnd \(key): replace \(ctx.keys.count) → \(insert.count)")

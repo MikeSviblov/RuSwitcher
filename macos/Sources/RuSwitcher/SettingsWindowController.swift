@@ -461,12 +461,24 @@ final class SettingsWindowController {
         return item
     }
 
-    /// «Всегда раскладка 1 (ABC)»: рядом с номером имя раскладки, чтобы не сверяться с
-    /// «Основными» (просьба kobygold, discussion #32).
+    /// «Всегда раскладка 1 (английский)»: рядом с номером язык раскладки на языке интерфейса,
+    /// чтобы не сверяться с «Основными» (просьба kobygold, discussion #32). Системное имя
+    /// («ABC») про язык ничего не говорит, а иностранцу ещё и приходило по-русски.
     private func hotkeyTitle(_ slot: HotkeySlot, base: String) -> String {
         let n = slot == .layout1 ? 1 : (slot == .layout2 ? 2 : 0)
-        guard n > 0, let name = LayoutSwitcher.pairLayoutName(n) else { return base }
+        guard n > 0, let name = Self.pairLayoutLabel(n) else { return base }
         return "\(base) (\(name))"
+    }
+
+    /// Язык раскладки N; если у пары один язык («Русская» и «Русская — ПК»), он раскладки не
+    /// различит — тогда системное имя раскладки.
+    private static func pairLayoutLabel(_ n: Int) -> String? {
+        let langs = LayoutSwitcher.pairLanguages()
+        if langs.count == 2, langs[0] != langs[1],
+           let name = Locale(identifier: L10n.languageCode).localizedString(forLanguageCode: langs[n - 1]) {
+            return name
+        }
+        return LayoutSwitcher.pairLayoutName(n)
     }
 
     /// Раскладку 1/2 сменили в «Основных» — подписи хоткеев должны показать новые имена.

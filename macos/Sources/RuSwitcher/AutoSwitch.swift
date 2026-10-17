@@ -122,6 +122,10 @@ enum LayoutDetector {
             let sideLang = hebrewIsCurrent ? oth : cur
             guard !isHebrew(sideLang), Dict.isAvailable(sideLang) else { return .undecided }
             if hebrewIsCurrent {
+                // Набрано частое ивритское слово: его образ в другой раскладке бывает настоящим
+                // словом («בוא» → «cut», «מקבל» → «neck»), а проверить набранное системным
+                // словарём нельзя (он принимает любые буквы). Такое слово не трогаем.
+                if HebrewCommonWords.contains(typed) { return .keep }
                 // NSSpellChecker токенизирует («привет!» для него валиден), а часть ивритских
                 // букв живёт на пунктуационных клавишах — EN-образ КОРРЕКТНОГО иврита может
                 // получиться «слово + пунктуация» и ложно пройти словарь (ревью-находка,

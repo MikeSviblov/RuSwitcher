@@ -43,9 +43,23 @@ struct TriggerConfig {
     let doubleTap: Bool
     var leftOnly = false
 
-    /// Модификаторы, которые учитывает тап-детект. Fn здесь, чтобы Fn+стрелки и Fn+F1…
-    /// (keyDown с удержанным Fn) и Fn вместе с другим модификатором не сошли за тап.
-    static let allModifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift, .maskSecondaryFn]
+    static let allModifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+    /// При НАЖАТИИ учитываем и Fn: Fn+⌥ не тап ⌥. При отпускании бит Fn смотрим только у
+    /// хоткеев с Fn: на событиях при зажатых стрелках и F-клавишах он бывает паразитным, и
+    /// привычные ⌥ / ⌥+⇧ молча перестали бы срабатывать (ревью #38). Нажатие самой Fn
+    /// сбрасывает взведённый хоткей без Fn отдельно (keyCode == KC.function).
+    static let pressModifiers = allModifiers.union(.maskSecondaryFn)
+
+    var usesFn: Bool {
+        switch kind {
+        case let .modifier(mask, _, _): return mask.contains(.maskSecondaryFn)
+        case let .combo(a, b): return a.contains(.maskSecondaryFn) || b.contains(.maskSecondaryFn)
+        case .capsLock: return false
+        }
+    }
+
+    /// Что должно быть отпущено, чтобы тап состоялся.
+    var releaseModifiers: CGEventFlags { usesFn ? TriggerConfig.pressModifiers : TriggerConfig.allModifiers }
 
     var isCapsLock: Bool { if case .capsLock = kind { return true } else { return false } }
 
@@ -126,7 +140,12 @@ struct TapDetector {
 
     /// true — хоткей сработал (с учётом двойного тапа).
     mutating func handle(flags: CGEventFlags, keyCode: UInt16, tapWindow: TimeInterval, comboTapWindow: TimeInterval) -> Bool {
-        let allMods = TriggerConfig.allModifiers
+        if keyCode == KC.function, !config.usesFn {
+            armed = false
+            pressTime = nil
+            return false
+        }
+        let release = config.releaseModifiers
         var tapped = false
         switch config.kind {
         case .capsLock:
@@ -134,7 +153,7 @@ struct TapDetector {
         case let .modifier(mask, left, right):
             let accepted = config.accepted(left: left, right: right)
             if flags.contains(mask) {
-                armed = accepted.contains(keyCode) && flags.intersection(allMods.subtracting(mask)).isEmpty
+                armed = accepted.contains(keyCode) && flags.intersection(TriggerConfig.pressModifiers.subtracting(mask)).isEmpty
                 pressTime = armed ? Date() : nil
             } else {
                 if armed, accepted.contains(keyCode), let t = pressTime, Date().timeIntervalSince(t) < tapWindow {
@@ -145,12 +164,12 @@ struct TapDetector {
             }
         case let .combo(maskA, maskB):
             let both: CGEventFlags = [maskA, maskB]
-            if !flags.intersection(allMods.subtracting(both)).isEmpty {
+            if !flags.intersection(release.subtracting(both)).isEmpty {
                 armed = false
             } else if flags.contains(both) {
-                armed = true
-                pressTime = Date()
-            } else if flags.intersection(allMods).isEmpty {
+                armed = flags.intersection(TriggerConfig.pressModifiers.subtracting(both)).isEmpty
+                pressTime = armed ? Date() : nil
+            } else if flags.intersection(release).isEmpty {
                 // issue #21: окно комбо шире (аккорд держат дольше флика), но с потолком —
                 // не срабатывать на попутное удержание во время скролла/жеста.
                 if armed, let t = pressTime, Date().timeIntervalSince(t) < comboTapWindow {

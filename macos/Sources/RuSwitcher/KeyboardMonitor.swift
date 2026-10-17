@@ -312,6 +312,9 @@ final class KeyboardMonitor: @unchecked Sendable {
     // MARK: - Event Handling
 
     fileprivate func handleKeyDown(keyCode: UInt16, flags: CGEventFlags, char: Character? = nil) {
+        // На части клавиатур Глобус шлёт и keyDown (179): это не печать, хоткей Fn он сбивать
+        // не должен (ревью #38).
+        if keyCode == KC.globeKeyDown { return }
         triggerArmed = false
         disarmHotkeys()   // клавиша между модификаторами = шорткат, не хоткей
         lastTapTime = nil
@@ -479,9 +482,12 @@ final class KeyboardMonitor: @unchecked Sendable {
             return true
 
         case let .modifier(mask, left, right):
+            if keyCode == KC.function, !triggerConfig.usesFn {   // Fn поверх триггера — не тап (#38)
+                triggerArmed = false
+                return false
+            }
             let accepted = triggerConfig.accepted(left: left, right: right)
-            let allMods = TriggerConfig.allModifiers
-            let otherMods = allMods.subtracting(mask)
+            let otherMods = TriggerConfig.pressModifiers.subtracting(mask)
 
             if flags.contains(mask) {
                 // нажатие: армим только если это нужная клавиша и нет других модификаторов
@@ -503,15 +509,19 @@ final class KeyboardMonitor: @unchecked Sendable {
             return false
 
         case let .combo(maskA, maskB):
+            if keyCode == KC.function, !triggerConfig.usesFn {   // Fn поверх комбо — не тап (#38)
+                triggerArmed = false
+                return false
+            }
             let both: CGEventFlags = [maskA, maskB]
-            let allMods = TriggerConfig.allModifiers
-            let others = allMods.subtracting(both)
-            if !flags.intersection(others).isEmpty {
+            let release = triggerConfig.releaseModifiers
+            if !flags.intersection(release.subtracting(both)).isEmpty {
                 triggerArmed = false                 // зажат посторонний модификатор — не наш триггер
             } else if flags.contains(both) {
-                triggerArmed = true                  // ровно оба нужных, без посторонних → армим
-                triggerPressTime = Date()
-            } else if flags.intersection(allMods).isEmpty {
+                // ровно оба нужных, без посторонних (и без Fn) → армим
+                triggerArmed = flags.intersection(TriggerConfig.pressModifiers.subtracting(both)).isEmpty
+                triggerPressTime = triggerArmed ? Date() : nil
+            } else if flags.intersection(release).isEmpty {
                 // всё отпущено: комбо, если был армлен и без клавиш между (triggerArmed это
                 // гарантирует). Окно расширено 0.4→2с (comboTapWindow, issue #21), но потолок
                 // сохранён — не срабатывать на попутное удержание во время скролла/жеста.

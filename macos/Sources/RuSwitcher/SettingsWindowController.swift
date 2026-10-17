@@ -19,6 +19,7 @@ final class SettingsWindowController {
     private var hotkeySidePopups: [HotkeySlot: NSPopUpButton] = [:]
     private var hotkeyDoubleChecks: [HotkeySlot: NSButton] = [:]
     private var hotkeyTitleLabels: [HotkeySlot: NSTextField] = [:]
+    private var fnHintLabel: NSTextField?
     private var exceptionEditors: [ExceptionListEditor] = []
     private var abbreviationEditor: AbbreviationEditor?
     private var freqPacksCheckbox: NSButton?
@@ -463,8 +464,10 @@ final class SettingsWindowController {
         fnHint.font = .systemFont(ofSize: 11)
         fnHint.textColor = .secondaryLabelColor
         view.addSubview(fnHint)
+        fnHintLabel = fnHint
 
         refreshHotkeyControls()
+        refreshFnHint()
         fitToText(view)
         item.view = topAligned(view)
         return item
@@ -550,6 +553,15 @@ final class SettingsWindowController {
         return sides.first { side in !higher.contains { HotkeySetting(key: key, side: side, doubleTap: false).overlaps($0) } }
     }
 
+    /// Подсказка про Fn предупреждает (оранжевым), если Fn выбран, а у Глобуса в системе своё
+    /// действие (AppleFnUsageType: 0 — «действие не требуется»): тогда macOS сработает тоже.
+    private func refreshFnHint() {
+        let settings = SettingsManager.shared
+        let fnUsed = HotkeySlot.allCases.contains { settings.hotkey($0).key.hasPrefix("fn") }
+        let globeAction = UserDefaults(suiteName: "com.apple.HIToolbox")?.object(forKey: "AppleFnUsageType") as? Int
+        fnHintLabel?.textColor = fnUsed && globeAction != 0 ? .systemOrange : .secondaryLabelColor
+    }
+
     private func updateHotkey(tag: Int, keyChanged: Bool = false, _ change: (inout HotkeySetting) -> Void) {
         guard HotkeySlot.allCases.indices.contains(tag) else { return }
         let slot = HotkeySlot.allCases[tag]
@@ -561,6 +573,7 @@ final class SettingsWindowController {
         if keyChanged, !h.key.isEmpty, let side = Self.freeSide(for: slot, key: h.key, preferred: h.side) { h.side = side }
         SettingsManager.shared.setHotkey(slot, h)
         refreshHotkeyControls()
+        refreshFnHint()
         onTriggerChanged?()               // reconfigure перечитает все хоткеи
     }
 

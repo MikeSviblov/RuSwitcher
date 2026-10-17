@@ -179,6 +179,8 @@ Free code signing on Windows provided by [SignPath.io](https://about.signpath.io
 
 [MIT](LICENSE) — free to use, modify, and distribute. The license covers the code; the RuSwitcher name and icon are not part of it, see [TRADEMARKS.md](TRADEMARKS.md).
 
+Word lists (the downloadable dictionaries and the built-in list of common Hebrew words) are derived from [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, CC BY-SA 4.0.
+
 ---
 
 ## Русский
@@ -323,3 +325,5 @@ cp -R RuSwitcher.app /Applications/
 ### Лицензия
 
 [MIT](LICENSE) — свободное использование, модификация и распространение. Лицензия относится к коду: название RuSwitcher и иконка в неё не входят, см. [TRADEMARKS.md](TRADEMARKS.md).
+
+Списки слов (скачиваемые словари и встроенный список частых ивритских слов) взяты из [FrequencyWords](https://github.com/hermitdave/FrequencyWords) Hermit Dave, CC BY-SA 4.0.

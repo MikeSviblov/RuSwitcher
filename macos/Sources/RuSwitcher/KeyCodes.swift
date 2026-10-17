@@ -26,4 +26,5 @@ enum KC {
     static let rightShift: UInt16 = 60
     static let rightOption: UInt16 = 61
     static let rightControl: UInt16 = 62
+    static let function: UInt16 = 63   // Fn / 🌐 на клавиатурах Apple
 }

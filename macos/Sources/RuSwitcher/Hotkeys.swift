@@ -12,11 +12,14 @@ struct HotkeySetting: Equatable {
     var doubleTap: Bool
 
     var isCombo: Bool { key.contains("+") }
+    /// Сторону (левая/правая) различаем только у одиночных модификаторов с парой клавиш:
+    /// у комбо сторона не приходит во флагах, а Fn один.
+    var hasSides: Bool { !isCombo && key != "fn" }
 
     /// Одно нажатие запустило бы оба хоткея: та же клавиша и пересекающиеся стороны.
     func overlaps(_ other: HotkeySetting) -> Bool {
         guard !key.isEmpty, key == other.key else { return false }
-        if isCombo { return true }
+        if !hasSides { return true }
         return side == .any || other.side == .any || side == other.side
     }
 }
@@ -40,6 +43,10 @@ struct TriggerConfig {
     let doubleTap: Bool
     var leftOnly = false
 
+    /// Модификаторы, которые учитывает тап-детект. Fn здесь, чтобы Fn+стрелки и Fn+F1…
+    /// (keyDown с удержанным Fn) и Fn вместе с другим модификатором не сошли за тап.
+    static let allModifiers: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift, .maskSecondaryFn]
+
     var isCapsLock: Bool { if case .capsLock = kind { return true } else { return false } }
 
     /// Кейкоды модификатора, тап которых считается (сторона: любая / левая / правая).
@@ -56,7 +63,7 @@ struct TriggerConfig {
     /// одно нажатие не должно делать два действия. Белый список обязателен: parse() маппит
     /// неизвестные строки в Option — рукописный мусор в defaults дублировал бы триггер.
     static func forSlot(_ slot: HotkeySlot) -> TriggerConfig? {
-        let known: Set<String> = ["option", "command", "control", "shift",
+        let known: Set<String> = ["option", "command", "control", "shift", "fn", "fn+shift",
                                   "command+shift", "control+shift", "command+option", "control+option",
                                   "option+shift"]
         let s = SettingsManager.shared
@@ -70,7 +77,7 @@ struct TriggerConfig {
 
     /// Сторона у комбо не различается: устаревшая «левая» из настроек в конфиг не попадает.
     private static func make(_ h: HotkeySetting) -> TriggerConfig {
-        let side = h.isCombo ? HotkeySide.any : h.side
+        let side = h.hasSides ? h.side : HotkeySide.any
         return parse(key: h.key, rightOnly: side == .right, doubleTap: h.doubleTap, leftOnly: side == .left)
     }
 
@@ -81,6 +88,9 @@ struct TriggerConfig {
         case "control": kind = .modifier(mask: .maskControl, left: KC.leftControl, right: KC.rightControl)
         case "shift":   kind = .modifier(mask: .maskShift,   left: KC.leftShift,   right: KC.rightShift)
         // Комбо двух модификаторов (issue #12: привычный по Windows стиль Alt+Shift и т.п.).
+        // #38: Fn / 🌐 (только клавиатуры Apple: у сторонних Fn обрабатывается в самой клавиатуре).
+        case "fn":             kind = .modifier(mask: .maskSecondaryFn, left: KC.function, right: KC.function)
+        case "fn+shift":       kind = .combo(.maskSecondaryFn, .maskShift)
         case "command+shift":  kind = .combo(.maskCommand, .maskShift)
         case "control+shift":  kind = .combo(.maskControl, .maskShift)
         case "command+option": kind = .combo(.maskCommand, .maskAlternate)
@@ -116,7 +126,7 @@ struct TapDetector {
 
     /// true — хоткей сработал (с учётом двойного тапа).
     mutating func handle(flags: CGEventFlags, keyCode: UInt16, tapWindow: TimeInterval, comboTapWindow: TimeInterval) -> Bool {
-        let allMods: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+        let allMods = TriggerConfig.allModifiers
         var tapped = false
         switch config.kind {
         case .capsLock:

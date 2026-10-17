@@ -379,6 +379,7 @@ final class SettingsWindowController {
         ("command", "Command ⌘"),
         ("control", "Control ⌃"),
         ("shift", "Shift ⇧"),
+        ("fn", "Fn 🌐 (Globe)"),   // #38
     ]
     // issue #12: комбо двух модификаторов (привычный по Windows стиль Alt+Shift).
     private static let comboItems: [(key: String, title: String)] = [
@@ -387,6 +388,7 @@ final class SettingsWindowController {
         ("control+shift", "⌃ + ⇧  (Control + Shift)"),
         ("command+option", "⌘ + ⌥  (Command + Option)"),
         ("control+option", "⌃ + ⌥  (Control + Option)"),
+        ("fn+shift", "🌐 + ⇧  (Fn + Shift)"),
     ]
 
     /// Все хоткеи: триггер конверсии, смена раскладки (#14), регистр (#29), «всегда
@@ -454,6 +456,13 @@ final class SettingsWindowController {
         triggerHint.font = .systemFont(ofSize: 11)
         triggerHint.textColor = .secondaryLabelColor
         view.addSubview(triggerHint)
+
+        // #38: два ограничения Fn, которые от нас не зависят.
+        let fnHint = NSTextField(wrappingLabelWithString: L10n.settingsHotkeyFnHint)
+        fnHint.frame = NSRect(x: 20, y: y - 44 - 12 - 44, width: 420, height: 44)
+        fnHint.font = .systemFont(ofSize: 11)
+        fnHint.textColor = .secondaryLabelColor
+        view.addSubview(fnHint)
 
         refreshHotkeyControls()
         fitToText(view)
@@ -525,8 +534,8 @@ final class SettingsWindowController {
             }
 
             let side = hotkeySidePopups[slot]
-            side?.selectItem(at: [HotkeySide.any, .left, .right].firstIndex(of: current.isCombo ? .any : current.side) ?? 0)
-            side?.isEnabled = !current.key.isEmpty && !current.isCombo
+            side?.selectItem(at: [HotkeySide.any, .left, .right].firstIndex(of: current.hasSides ? current.side : .any) ?? 0)
+            side?.isEnabled = !current.key.isEmpty && current.hasSides
             hotkeyDoubleChecks[slot]?.state = current.doubleTap ? .on : .off
             hotkeyDoubleChecks[slot]?.isEnabled = !current.key.isEmpty
         }
@@ -537,7 +546,7 @@ final class SettingsWindowController {
     private static func freeSide(for slot: HotkeySlot, key: String, preferred: HotkeySide) -> HotkeySide? {
         let settings = SettingsManager.shared
         let higher = HotkeySlot.allCases.prefix(while: { $0 != slot }).map { settings.hotkey($0) }
-        let sides: [HotkeySide] = key.contains("+") ? [.any] : [preferred, .any, .left, .right]
+        let sides: [HotkeySide] = HotkeySetting(key: key, side: .any, doubleTap: false).hasSides ? [preferred, .any, .left, .right] : [.any]
         return sides.first { side in !higher.contains { HotkeySetting(key: key, side: side, doubleTap: false).overlaps($0) } }
     }
 
@@ -546,7 +555,7 @@ final class SettingsWindowController {
         let slot = HotkeySlot.allCases[tag]
         var h = SettingsManager.shared.hotkey(slot)
         change(&h)
-        if h.isCombo { h.side = .any }   // сторону комбо не различаем
+        if !h.hasSides { h.side = .any }   // у комбо и у Fn стороны нет
         // Новую клавишу ставим на свободную сторону, если выбранная занята (левый ⌘ уже у
         // раскладки 1 → ⌘ для раскладки 2 сам встаёт на правую).
         if keyChanged, !h.key.isEmpty, let side = Self.freeSide(for: slot, key: h.key, preferred: h.side) { h.side = side }

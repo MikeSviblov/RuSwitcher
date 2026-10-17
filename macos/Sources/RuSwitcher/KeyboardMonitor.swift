@@ -480,7 +480,7 @@ final class KeyboardMonitor: @unchecked Sendable {
 
         case let .modifier(mask, left, right):
             let accepted = triggerConfig.accepted(left: left, right: right)
-            let allMods: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            let allMods = TriggerConfig.allModifiers
             let otherMods = allMods.subtracting(mask)
 
             if flags.contains(mask) {
@@ -504,7 +504,7 @@ final class KeyboardMonitor: @unchecked Sendable {
 
         case let .combo(maskA, maskB):
             let both: CGEventFlags = [maskA, maskB]
-            let allMods: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
+            let allMods = TriggerConfig.allModifiers
             let others = allMods.subtracting(both)
             if !flags.intersection(others).isEmpty {
                 triggerArmed = false                 // зажат посторонний модификатор — не наш триггер

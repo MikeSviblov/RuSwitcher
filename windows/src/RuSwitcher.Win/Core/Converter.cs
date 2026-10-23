@@ -187,10 +187,13 @@ internal static class Converter
     public static bool ConvertSelection(bool smart)
     {
         IntPtr sourceHkl = LayoutSwitcher.Current();
-        // N-set (#42): smart mode ranks every candidate per word; the plain one-way flip keeps
-        // the old pair behaviour against the first layout of the set.
+        // N-set (#42): smart mode decides the direction PER WORD over the whole set (a mixed
+        // selection holds words typed in different layouts); the plain one-way flip keeps the
+        // old pair behaviour against the first non-current layout of the set.
+        var set = new List<IntPtr>(LayoutSwitcher.ActiveSet());
+        if (!set.Contains(sourceHkl)) set.Add(sourceHkl);
         var targets = new List<IntPtr>();
-        foreach (var hkl in LayoutSwitcher.ActiveSet())
+        foreach (var hkl in set)
             if (hkl != sourceHkl) targets.Add(hkl);
         if (targets.Count == 0) return false;
 
@@ -202,7 +205,7 @@ internal static class Converter
         if (sel.Length == 0) { RestoreClipboard(saved); return false; }   // nothing selected
 
         string converted = smart
-            ? SmartConvert.Selection(sel, sourceHkl, targets)
+            ? SmartConvert.Selection(sel, sourceHkl, set)
             : KeyMapper.ConvertText(sel, sourceHkl, targets[0]);
         if (converted == sel) { RestoreClipboard(saved); return false; }  // no-op
 

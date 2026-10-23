@@ -11,18 +11,32 @@ namespace RuSwitcher.Win.Core;
 /// </summary>
 internal static class SmartConvert
 {
-    /// <summary>Per-word smart conversion against the ordered candidate set (#42): for each word
-    /// the first dictionary-valid rendering wins, same ranking as the manual trigger. Without a
-    /// dictionary — the old plain one-way flip into the first candidate.</summary>
-    public static string Selection(string text, IntPtr sourceHkl, IReadOnlyList<IntPtr> targetHkls)
+    /// <summary>Per-word smart conversion against the ordered layout set (#42). A MIXED selection
+    /// holds words typed in different layouts, so the direction is decided PER WORD: char maps are
+    /// built for every ordered pair of set layouts, a word valid in any set language is kept, and
+    /// otherwise the first dictionary-valid rendering wins (set order). <paramref name="setHkls"/>
+    /// is the full set INCLUDING the current layout; without a dictionary — the old plain one-way
+    /// flip from <paramref name="sourceHkl"/> into the first other layout.</summary>
+    public static string Selection(string text, IntPtr sourceHkl, IReadOnlyList<IntPtr> setHkls)
     {
-        if (targetHkls.Count == 0) return text;
-        if (!Dict.Available) return KeyMapper.ConvertText(text, sourceHkl, targetHkls[0]);
+        if (setHkls.Count < 2) return text;
+        if (!Dict.Available)
+        {
+            foreach (var hkl in setHkls)
+                if (hkl != sourceHkl) return KeyMapper.ConvertText(text, sourceHkl, hkl);
+            return text;
+        }
 
-        string srcTag = LangTag(sourceHkl);
-        var maps = new List<(Dictionary<char, char> fwd, string tag)>(targetHkls.Count);
-        foreach (var hkl in targetHkls)
-            maps.Add((KeyMapper.BuildPairMap(sourceHkl, hkl), LangTag(hkl)));
+        var setTags = new List<string>(setHkls.Count);
+        foreach (var hkl in setHkls)
+            if (!setTags.Contains(LangTag(hkl))) setTags.Add(LangTag(hkl));
+
+        // Char maps for every ordered pair of the set (a word may have been typed in ANY of them).
+        var maps = new List<(Dictionary<char, char> fwd, string tgtTag)>();
+        foreach (var src in setHkls)
+            foreach (var tgt in setHkls)
+                if (src != tgt)
+                    maps.Add((KeyMapper.BuildPairMap(src, tgt), LangTag(tgt)));
 
         var sb = new StringBuilder(text.Length);
         int i = 0;
@@ -43,9 +57,9 @@ internal static class SmartConvert
             foreach (var (fwd, tag) in maps)
             {
                 string flipped = Flip(word, fwd);
-                candidates.Add((flipped, LetterCore(flipped), tag));
+                if (flipped != word) candidates.Add((flipped, LetterCore(flipped), tag));
             }
-            sb.Append(PickWordConversion(word, core, srcTag, candidates, Dict.IsValidWord,
+            sb.Append(PickWordConversion(word, core, setTags, candidates, Dict.IsValidWord,
                 Settings.Current.NeverConvert, Settings.Current.AlwaysConvert));
         }
         return sb.ToString();
@@ -53,9 +67,10 @@ internal static class SmartConvert
 
     /// <summary>The per-word verdict against the candidate list, in set order. Precedence is the
     /// pair version's, unchanged: always-list (on the CONVERTED form) → never-list (typed form) →
-    /// keep real source words (iPhone, стоит) → first candidate whose rendering is a real word of
-    /// its own language → keep. Pure, for tests.</summary>
-    internal static string PickWordConversion(string word, string core, string srcTag,
+    /// keep words that are real in ANY set language (iPhone, стоит — whatever layout they came
+    /// from) → first candidate whose rendering is a real word of its own language → keep.
+    /// Pure, for tests.</summary>
+    internal static string PickWordConversion(string word, string core, IReadOnlyList<string> setTags,
         IReadOnlyList<(string flipped, string flippedCore, string tgtTag)> candidates,
         Func<string, string, bool> isValidWord, ICollection<string> never, ICollection<string> always)
     {
@@ -65,7 +80,8 @@ internal static class SmartConvert
         if (never.Contains(core.ToLowerInvariant())) return word;
 
         if (core.Length < 2) return word;                       // too short to judge — keep
-        if (isValidWord(core, srcTag)) return word;             // already a real word — keep
+        foreach (var tag in setTags)
+            if (isValidWord(core, tag)) return word;            // already a real word — keep
 
         foreach (var c in candidates)
             if (c.flippedCore.Length >= 2 && isValidWord(c.flippedCore, c.tgtTag))

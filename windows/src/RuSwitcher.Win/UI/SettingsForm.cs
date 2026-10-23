@@ -79,6 +79,48 @@ internal sealed class SettingsForm : Form
         };
         y += 40;
 
+        // --- N-layout set (#42): which layouts take part in conversion and in what order ---
+        var lblLayouts = new Label { Text = L10n.T("settings.layouts"), Left = 16, Top = y, AutoSize = true };
+        y += 20;
+        var lstLayouts = new CheckedListBox { Left = 16, Top = y, Width = 300, Height = 76, CheckOnClick = true, IntegralHeight = false };
+        var btnUp = new Button { Text = L10n.T("settings.layouts.up"), Left = 324, Top = y, Width = 60 };
+        var btnDown = new Button { Text = L10n.T("settings.layouts.down"), Left = 324, Top = y + 30, Width = 60 };
+
+        // Active-set layouts first (checked, in set order), then the remaining installed ones.
+        var active = LayoutSwitcher.ActiveSet();
+        foreach (var hkl in active) lstLayouts.Items.Add(new LayoutItem(hkl), true);
+        foreach (var hkl in LayoutSwitcher.Installed())
+            if (!active.Contains(hkl)) lstLayouts.Items.Add(new LayoutItem(hkl), false);
+
+        void SaveLayoutSet()
+        {
+            var set = new List<long>();
+            for (int i = 0; i < lstLayouts.Items.Count; i++)
+                if (lstLayouts.GetItemChecked(i))
+                    set.Add(((LayoutItem)lstLayouts.Items[i]).Hkl.ToInt64() & 0xFFFFFFFF);
+            // Fewer than two checked can't form a conversion set → fall back to "all installed".
+            s.LayoutSet = set.Count >= 2 ? set : new List<long>();
+            s.Save();
+        }
+        // ItemCheck fires BEFORE the state flips — save after the message is fully handled.
+        lstLayouts.ItemCheck += (_, _) => BeginInvoke(SaveLayoutSet);
+
+        void MoveSelected(int delta)
+        {
+            int i = lstLayouts.SelectedIndex, j = i + delta;
+            if (i < 0 || j < 0 || j >= lstLayouts.Items.Count) return;
+            var item = lstLayouts.Items[i];
+            bool check = lstLayouts.GetItemChecked(i);
+            lstLayouts.Items.RemoveAt(i);
+            lstLayouts.Items.Insert(j, item);
+            lstLayouts.SetItemChecked(j, check);
+            lstLayouts.SelectedIndex = j;
+            SaveLayoutSet();
+        }
+        btnUp.Click += (_, _) => MoveSelected(-1);
+        btnDown.Click += (_, _) => MoveSelected(+1);
+        y += 84;
+
         var btnExceptions = new Button { Text = L10n.T("settings.exceptions"), Left = 16, Top = y, Width = 130 };
         btnExceptions.Click += (_, _) => { using var ex = new ExceptionsForm(); ex.ShowDialog(this); };
 
@@ -93,8 +135,19 @@ internal sealed class SettingsForm : Form
         Controls.AddRange(new Control[]
         {
             lblTrigger, cmbTrigger, chkWhole, chkSmart, chkAuto, chkSound, chkStart, chkPerApp,
-            chkUpdates, lblSwitch, cmbSwitch, btnExceptions, link, btnClose,
+            chkUpdates, lblSwitch, cmbSwitch, lblLayouts, lstLayouts, btnUp, btnDown,
+            btnExceptions, link, btnClose,
         });
+    }
+
+    /// <summary>A CheckedListBox row: an installed layout shown by its native language name.</summary>
+    private sealed record LayoutItem(IntPtr Hkl)
+    {
+        public override string ToString()
+        {
+            try { return System.Globalization.CultureInfo.GetCultureInfo((int)(Hkl.ToInt64() & 0xFFFF)).NativeName; }
+            catch { return SmartConvert.LangTag(Hkl); }
+        }
     }
 
     private CheckBox MakeCheck(string text, ref int top, bool value, Action<bool> onChange)

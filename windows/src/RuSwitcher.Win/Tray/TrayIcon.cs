@@ -74,10 +74,26 @@ internal sealed class TrayIcon : IDisposable
             uID = 1,
             uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
             uCallbackMessage = WM_TRAYICON,
-            hIcon = LoadIconW(IntPtr.Zero, IDI_APPLICATION),
+            hIcon = AppIcon(),
             szTip = tooltip,
         };
         Shell_NotifyIconW(NIM_ADD, ref _nid);
+    }
+
+    // The app icon embedded by <ApplicationIcon> (same artwork as macos/icon.png); kept in a
+    // field so the HICON stays alive while the tray shows it. Generic fallback if extraction
+    // fails (e.g. an exotic host without an associated icon).
+    private System.Drawing.Icon? _appIcon;
+
+    private IntPtr AppIcon()
+    {
+        try
+        {
+            if (Environment.ProcessPath is { } exe)
+                _appIcon = System.Drawing.Icon.ExtractAssociatedIcon(exe);
+        }
+        catch { _appIcon = null; }
+        return _appIcon?.Handle ?? LoadIconW(IntPtr.Zero, IDI_APPLICATION);
     }
 
     internal static string TriggerName(TriggerKind t) => t switch
@@ -194,6 +210,8 @@ internal sealed class TrayIcon : IDisposable
         if (_hwnd != IntPtr.Zero)
         {
             Shell_NotifyIconW(NIM_DELETE, ref _nid);
+            _appIcon?.Dispose();   // free the HICON only after the tray entry is gone
+            _appIcon = null;
             DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
         }

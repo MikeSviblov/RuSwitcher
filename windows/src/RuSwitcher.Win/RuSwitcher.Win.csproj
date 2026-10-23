@@ -19,6 +19,8 @@
     <Platforms>x64;ARM64</Platforms>
     <!-- Windows track starts pre-1.0 (beta). Keep in sync with windows/version.json. -->
     <Version>0.9.0</Version>
+    <!-- app.ico is generated from macos/icon.png (the same artwork on both platforms). -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

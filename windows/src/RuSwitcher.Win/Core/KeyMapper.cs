@@ -29,7 +29,7 @@ internal static class KeyMapper
         if (key.Shift) state[0x10] = 0x80;               // VK_SHIFT down
         if (key.Caps) state[0x14] = 0x01;                // VK_CAPITAL toggled
 
-        var buf = new char[8];
+        var buf = new char[16];   // headroom: dead-key composition can emit several WCHARs
         // wFlags bit 2 (0x4): do not change the keyboard state (avoids clobbering real dead-key
         // state) — our fresh key-state array means a base key after a dead key renders plain;
         // the composition rule in DeadKeys rebuilds the accented form.

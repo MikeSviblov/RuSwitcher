@@ -40,13 +40,12 @@ internal static class Converter
     // issue #15. The ambiguous ю/б/ж tails (e.g. «зуб» = "pe,") are left to the user, as on macOS.
     private static readonly HashSet<char> TrailingPunct = new() { ',', '.', '!', '?', ';', ':', ')' };
 
-    /// <summary>Convert the buffered word into the opposite layout. Returns true if it acted.</summary>
+    /// <summary>Convert the buffered word into the best other layout. Returns true if it acted.</summary>
     public static bool ConvertLastWord(KeystrokeBuffer buffer)
     {
         if (buffer.IsEmpty) return false;
 
         IntPtr sourceHkl = LayoutSwitcher.Current();
-        if (LayoutSwitcher.Opposite() is not { } targetHkl) return false;
 
         // Split off trailing real punctuation (kept as typed).
         var keys = buffer.CurrentWord;
@@ -64,8 +63,23 @@ internal static class Converter
         for (int i = 0; i < coreCount; i++) core.Add(keys[i]);
         string suf = suffix.ToString();
 
-        string convertedCore = KeyMapper.ConvertWord(core, targetHkl);
-        if (convertedCore.Length == 0) return false;
+        // N-layout set (#42): with 3+ installed layouts «the first HKL that isn't current» is an
+        // arbitrary target («руддщ» became «ηελλο», not "hello"). Render the core in EVERY other
+        // layout and prefer the first dictionary-valid candidate; with no dictionary signal, fall
+        // back to the first non-current layout — byte-identical to the old pair behaviour.
+        var hkls = new List<IntPtr>();
+        var candidates = new List<(string converted, string langTag)>();
+        foreach (var hkl in LayoutSwitcher.Installed())
+        {
+            if (hkl == sourceHkl) continue;
+            hkls.Add(hkl);
+            candidates.Add((KeyMapper.ConvertWord(core, hkl), SmartConvert.LangTag(hkl)));
+        }
+        int pick = PickTargetIndex(candidates, Dict.Available, Dict.IsValidWord);
+        if (pick < 0) return false;
+        IntPtr targetHkl = hkls[pick];
+
+        string convertedCore = candidates[pick].converted;
         string originalCore = KeyMapper.ConvertWord(core, sourceHkl);  // as it was typed
 
         string converted = convertedCore + suf;
@@ -79,6 +93,26 @@ internal static class Converter
         _lastWasAuto = false;                     // a manual convert isn't subject to learn-from-undo
         buffer.Reset();
         return true;
+    }
+
+    /// <summary>Pick the conversion target among the non-current layouts: the FIRST candidate whose
+    /// rendering is a dictionary-valid word of its own language wins (so «руддщ» goes to "hello",
+    /// not to its Greek image); without a dictionary signal — the first candidate with any
+    /// rendering, which with two layouts is exactly the old pair behaviour. Pure and injectable
+    /// for tests; -1 when nothing renders.</summary>
+    internal static int PickTargetIndex(IReadOnlyList<(string converted, string langTag)> candidates,
+        bool dictAvailable, Func<string, string, bool> isValidWord)
+    {
+        if (dictAvailable)
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                var (c, tag) = candidates[i];
+                if (c.Length > 0 && c.All(char.IsLetter) && isValidWord(c.ToLowerInvariant(), tag))
+                    return i;
+            }
+        for (int i = 0; i < candidates.Count; i++)
+            if (candidates[i].converted.Length > 0) return i;
+        return -1;
     }
 
     /// <summary>Reverse the last conversion (and toggle for a repeated trigger).</summary>

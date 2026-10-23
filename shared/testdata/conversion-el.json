@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "description": "Greek pair mode: dead-key composition, letter-veto parity, ShortWords el. Draft seeded for issue #42; keys are physical (US-QWERTY base), ';' is the Greek tonos dead key, 'q' renders as the Greek question mark ';'.",
+  "cases": [
+    {
+      "name": "tonos-composes-einai",
+      "keys": "e;inai",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "e;inai",
+      "converted": "είναι",
+      "decide": "switchToConverted",
+      "dict": { "el": ["είναι"], "en": [] },
+      "note": "Tonos dead key attaches to the next base char, NFC gives U+03AF. The macOS letter veto passes because CONVERTED is all letters even though typed contains ';' — Windows needs this parity."
+    },
+    {
+      "name": "tonos-composes-logos-final-sigma",
+      "keys": "l;ogow",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "l;ogow",
+      "converted": "λόγος",
+      "decide": "switchToConverted",
+      "dict": { "el": ["λόγος"], "en": [] },
+      "note": "Final sigma ς lives on the W key."
+    },
+    {
+      "name": "trailing-tonos-stays-spacing",
+      "keys": "e;",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "e;",
+      "converted": "ε΄",
+      "note": "Conversion-only: a dead-key accent with no following base char stays as the spacing char (U+0384)."
+    },
+    {
+      "name": "tonos-unit-iota",
+      "keys": ";i",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": ";i",
+      "converted": "ί",
+      "note": "Conversion-only: composition unit, NFC precomposes to U+03AF (length 1)."
+    },
+    {
+      "name": "greek-question-mark-literal-tail",
+      "keys": "tiq",
+      "sourceLayout": "el",
+      "targetLayout": "en",
+      "typed": "τι;",
+      "converted": "tiq",
+      "note": "Conversion-only: Q renders the Greek question mark ';' — a legit literal tail of correct Greek, to be split as trailing punctuation by the caller, never treated as a dead key."
+    },
+    {
+      "name": "accentless-greek-undecided-today",
+      "keys": "einai",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "einai",
+      "converted": "ειναι",
+      "decide": "undecided",
+      "dict": { "el": [], "en": [] },
+      "note": "Chat-style Greek without tonos: the system speller rejects it, so today this stays undecided. A future el frequency pack (tonos-stripped lookup, positive signal only) would flip this to switchToConverted; output keeps exactly what the user typed."
+    },
+    {
+      "name": "ru-image-of-greek",
+      "keys": "e;inai",
+      "sourceLayout": "ru",
+      "targetLayout": "el",
+      "typed": "ужштфш",
+      "converted": "είναι",
+      "decide": "switchToConverted",
+      "dict": { "el": ["είναι"], "ru": [] },
+      "note": "The ';' key is a plain letter «ж» on ЙЦУКЕН — no dead key on the source side."
+    },
+    {
+      "name": "greek-image-of-english",
+      "keys": "hello",
+      "sourceLayout": "el",
+      "targetLayout": "en",
+      "typed": "ηελλο",
+      "converted": "hello",
+      "decide": "switchToConverted",
+      "dict": { "en": ["hello"], "el": [] }
+    },
+    {
+      "name": "greek-image-of-russian",
+      "keys": "ghbdtn",
+      "sourceLayout": "el",
+      "targetLayout": "ru",
+      "typed": "γηβδτν",
+      "converted": "привет",
+      "decide": "switchToConverted",
+      "dict": { "ru": ["привет"], "el": [] }
+    },
+    {
+      "name": "shortwords-el-converts",
+      "keys": "ua",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "ua",
+      "converted": "θα",
+      "decide": "switchToConverted",
+      "dict": { "el": [], "en": [] },
+      "note": "2-letter path: θα is in ShortWords el, 'ua' is not a listed en word — positive frequency signal, no dictionary involved."
+    },
+    {
+      "name": "shortwords-frequent-collision-keeps",
+      "keys": "to",
+      "sourceLayout": "en",
+      "targetLayout": "el",
+      "typed": "to",
+      "converted": "το",
+      "decide": "keep",
+      "dict": { "el": [], "en": [] },
+      "note": "το↔to: both frequent — the symmetric gate declines auto-conversion in both directions (precision over recall; the manual trigger still works)."
+    },
+    {
+      "name": "shortwords-ru-en-unchanged",
+      "keys": "yt",
+      "sourceLayout": "en",
+      "targetLayout": "ru",
+      "typed": "yt",
+      "converted": "не",
+      "decide": "switchToConverted",
+      "dict": { "ru": [], "en": [] },
+      "note": "Regression guard: issue #22 behavior for the existing ru↔en pair must stay byte-identical."
+    }
+  ]
+}

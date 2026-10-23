@@ -148,6 +148,19 @@ internal static class Program
         };
         hook.Install();
 
+        // A mouse click moves the caret or selects — the buffer no longer mirrors the word at
+        // the caret, and a pending reconvert/cycle would delete the wrong text. Resetting here
+        // also routes the next trigger to the SELECTION path after a mouse selection (the
+        // last-word path used to eat the selection with its backspaces).
+        using var mouse = new MouseHook();
+        mouse.ButtonDown += () =>
+        {
+            if (!enabled) return;
+            buffer.Reset();
+            Converter.ClearReconvert();
+        };
+        mouse.Install();
+
         // Per-app layout memory (issue): restores each app's last-used layout on focus. Off by default.
         using var appTracker = new AppLayoutTracker();
         appTracker.Install();

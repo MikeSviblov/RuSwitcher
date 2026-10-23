@@ -119,6 +119,17 @@ internal static class Program
                 return;
             }
 
+            if (vk == KeystrokeBuffer.VK_BACK)
+            {
+                // Mirror manual deletion in the buffer (see KeystrokeBuffer.PopLast). Ctrl+Backspace
+                // deletes a whole word — the buffer can't mirror that, so reset (precision-first).
+                // The word on screen changed either way → a pending reconvert no longer applies.
+                if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) buffer.Reset();
+                else buffer.PopLast();
+                Converter.ClearReconvert();
+                return;
+            }
+
             if (KeystrokeBuffer.IsTypingKey(vk))
             {
                 Converter.ClearReconvert();  // typing changed the word — the pending undo no longer applies

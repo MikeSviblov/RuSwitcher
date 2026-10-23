@@ -11,13 +11,18 @@ namespace RuSwitcher.Win.Core;
 /// </summary>
 internal static class SmartConvert
 {
-    public static string Selection(string text, IntPtr sourceHkl, IntPtr targetHkl)
+    /// <summary>Per-word smart conversion against the ordered candidate set (#42): for each word
+    /// the first dictionary-valid rendering wins, same ranking as the manual trigger. Without a
+    /// dictionary — the old plain one-way flip into the first candidate.</summary>
+    public static string Selection(string text, IntPtr sourceHkl, IReadOnlyList<IntPtr> targetHkls)
     {
-        if (!Dict.Available) return KeyMapper.ConvertText(text, sourceHkl, targetHkl);
+        if (targetHkls.Count == 0) return text;
+        if (!Dict.Available) return KeyMapper.ConvertText(text, sourceHkl, targetHkls[0]);
 
         string srcTag = LangTag(sourceHkl);
-        string tgtTag = LangTag(targetHkl);
-        var fwd = KeyMapper.BuildPairMap(sourceHkl, targetHkl);
+        var maps = new List<(Dictionary<char, char> fwd, string tag)>(targetHkls.Count);
+        foreach (var hkl in targetHkls)
+            maps.Add((KeyMapper.BuildPairMap(sourceHkl, hkl), LangTag(hkl)));
 
         var sb = new StringBuilder(text.Length);
         int i = 0;
@@ -31,27 +36,40 @@ internal static class SmartConvert
             int start = i;
             while (i < text.Length && !char.IsWhiteSpace(text[i])) i++;
             string word = text.Substring(start, i - start);
-            sb.Append(ConvertWord(word, fwd, srcTag, tgtTag));
+
+            string core = LetterCore(word);
+            if (core.Length == 0) { sb.Append(word); continue; }
+            var candidates = new List<(string flipped, string flippedCore, string tgtTag)>(maps.Count);
+            foreach (var (fwd, tag) in maps)
+            {
+                string flipped = Flip(word, fwd);
+                candidates.Add((flipped, LetterCore(flipped), tag));
+            }
+            sb.Append(PickWordConversion(word, core, srcTag, candidates, Dict.IsValidWord,
+                Settings.Current.NeverConvert, Settings.Current.AlwaysConvert));
         }
         return sb.ToString();
     }
 
-    private static string ConvertWord(string word, Dictionary<char, char> fwd, string srcTag, string tgtTag)
+    /// <summary>The per-word verdict against the candidate list, in set order. Precedence is the
+    /// pair version's, unchanged: always-list (on the CONVERTED form) → never-list (typed form) →
+    /// keep real source words (iPhone, стоит) → first candidate whose rendering is a real word of
+    /// its own language → keep. Pure, for tests.</summary>
+    internal static string PickWordConversion(string word, string core, string srcTag,
+        IReadOnlyList<(string flipped, string flippedCore, string tgtTag)> candidates,
+        Func<string, string, bool> isValidWord, ICollection<string> never, ICollection<string> always)
     {
-        string core = LetterCore(word);
-        if (core.Length == 0) return word;
-
-        // Honor the user's exception lists, same precedence/keys as AutoConverter (learn-from-undo).
-        string flipped = Flip(word, fwd);
-        string flippedCore = LetterCore(flipped);
-        if (Settings.Current.AlwaysConvert.Contains(flippedCore.ToLowerInvariant())) return flipped;
-        if (Settings.Current.NeverConvert.Contains(core.ToLowerInvariant())) return word;
+        foreach (var c in candidates)
+            if (c.flippedCore.Length > 0 && always.Contains(c.flippedCore.ToLowerInvariant()))
+                return c.flipped;
+        if (never.Contains(core.ToLowerInvariant())) return word;
 
         if (core.Length < 2) return word;                       // too short to judge — keep
-        if (Dict.IsValidWord(core, srcTag)) return word;        // already a real word — keep (iPhone, стоит)
+        if (isValidWord(core, srcTag)) return word;             // already a real word — keep
 
-        if (flippedCore.Length >= 2 && Dict.IsValidWord(flippedCore, tgtTag))
-            return flipped;                                     // gibberish that becomes a real word — flip
+        foreach (var c in candidates)
+            if (c.flippedCore.Length >= 2 && isValidWord(c.flippedCore, c.tgtTag))
+                return c.flipped;                               // gibberish that becomes a real word
 
         return word;                                            // unresolved (name/brand/unknown) — keep
     }

@@ -164,6 +164,36 @@ public class AutoConverterTests
         Assert.True(r);
     }
 
+    // --- N-set aggregation (#42): exactly one candidate must claim the word ---
+
+    [Fact]
+    public void Aggregation_converts_when_exactly_one_candidate_agrees()
+    {
+        var candidates = new List<(string, string)> { ("привет", "ru"), ("γηβδτν", "el") };
+        int i = AutoConverter.PickAutoTargetIndex("ghbdtn", candidates, "en",
+            caps: false, dictAvailable: true, Dict(("привет", "ru")), None, None);
+        Assert.Equal(0, i);
+    }
+
+    [Fact]
+    public void Aggregation_keeps_when_two_candidates_agree()
+    {
+        // Both renderings are valid words of their languages → ambiguous, do nothing.
+        var candidates = new List<(string, string)> { ("привет", "ru"), ("χψηθω", "el") };
+        int i = AutoConverter.PickAutoTargetIndex("ghbdtn", candidates, "en",
+            caps: false, dictAvailable: true, Dict(("привет", "ru"), ("χψηθω", "el")), None, None);
+        Assert.Equal(-1, i);
+    }
+
+    [Fact]
+    public void Aggregation_keeps_when_no_candidate_agrees()
+    {
+        var candidates = new List<(string, string)> { ("йцукен", "ru"), ("ςερτυ", "el") };
+        int i = AutoConverter.PickAutoTargetIndex("qwerty", candidates, "en",
+            caps: false, dictAvailable: true, Dict(), None, None);
+        Assert.Equal(-1, i);
+    }
+
     [Fact]
     public void Never_auto_converts_toward_hebrew()
     {

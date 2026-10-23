@@ -19,6 +19,22 @@ internal static class LayoutSwitcher
         return list;
     }
 
+    /// <summary>The user's ordered conversion set (#42): <see cref="Settings.LayoutSet"/> filtered
+    /// to the actually installed HKLs, in set order. An empty or degenerate (&lt;2 installed
+    /// entries) set falls back to all installed layouts — the previous behaviour.</summary>
+    public static IReadOnlyList<IntPtr> ActiveSet()
+    {
+        var installed = Installed();
+        var wanted = Settings.Current.LayoutSet;
+        if (wanted.Count == 0) return installed;
+        var result = new List<IntPtr>(wanted.Count);
+        foreach (long stored in wanted)
+            foreach (var hkl in installed)
+                if ((hkl.ToInt64() & 0xFFFFFFFF) == stored && !result.Contains(hkl))
+                    result.Add(hkl);
+        return result.Count >= 2 ? result : installed;
+    }
+
     /// <summary>HKL of the layout active in the focused window's thread.</summary>
     public static IntPtr Current()
     {

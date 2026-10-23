@@ -22,17 +22,29 @@ internal static class AutoConverter
         if (keys.Count == 0) return false;
 
         IntPtr sourceHkl = LayoutSwitcher.Current();
-        if (LayoutSwitcher.Opposite() is not { } targetHkl) return false;
-
         string typed = KeyMapper.ConvertWord(keys, sourceHkl);
-        string converted = KeyMapper.ConvertWord(keys, targetHkl);
-        if (converted.Length == 0 || converted == typed) return false;
-
         string srcTag = SmartConvert.LangTag(sourceHkl);
-        string tgtTag = SmartConvert.LangTag(targetHkl);
         bool caps = keys.All(k => k.Caps);
 
-        if (!ShouldConvert(typed, converted, srcTag, tgtTag, caps)) return false;
+        // N-layout set (#42): run the UNCHANGED pairwise verdict once per candidate layout and
+        // aggregate — convert only when EXACTLY ONE candidate says yes; zero or several mean
+        // ambiguity → do nothing (precision over recall, the manual trigger still works).
+        // With two layouts there is a single candidate and behaviour is byte-identical.
+        var candidates = new List<(string converted, string tgtTag)>();
+        var hkls = new List<IntPtr>();
+        foreach (var hkl in LayoutSwitcher.ActiveSet())
+        {
+            if (hkl == sourceHkl) continue;
+            hkls.Add(hkl);
+            candidates.Add((KeyMapper.ConvertWord(keys, hkl), SmartConvert.LangTag(hkl)));
+        }
+        int pick = PickAutoTargetIndex(typed, candidates, srcTag, caps,
+            Dict.Available, Dict.IsValidWord,
+            Settings.Current.NeverConvert, Settings.Current.AlwaysConvert);
+        if (pick < 0) return false;
+
+        string converted = candidates[pick].converted;
+        IntPtr targetHkl = hkls[pick];
 
         TextInjector.Replace(backspaces: keys.Count + 1, text: converted + " ");
         LayoutSwitcher.SwitchTo(targetHkl);
@@ -40,12 +52,25 @@ internal static class AutoConverter
         return true;
     }
 
-    // Bound to the real dictionary + settings; the decision itself lives in the pure ShouldConvertPure
-    // so it can be unit-tested off Windows (no COM / no Win32).
-    private static bool ShouldConvert(string typed, string converted, string srcTag, string tgtTag, bool caps) =>
-        ShouldConvertPure(typed, converted, srcTag, tgtTag, caps,
-            Dict.Available, Dict.IsValidWord,
-            Settings.Current.NeverConvert, Settings.Current.AlwaysConvert);
+    /// <summary>The N-set aggregation (#42): index of the single candidate whose pairwise verdict
+    /// is "convert", or -1 when none or more than one agree (ambiguous → keep). Pure, for tests.</summary>
+    internal static int PickAutoTargetIndex(string typed,
+        IReadOnlyList<(string converted, string tgtTag)> candidates, string srcTag, bool caps,
+        bool dictAvailable, Func<string, string, bool> isValidWord,
+        ICollection<string> never, ICollection<string> always)
+    {
+        int pick = -1;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            var (converted, tgtTag) = candidates[i];
+            if (converted.Length == 0 || converted == typed) continue;
+            if (!ShouldConvertPure(typed, converted, srcTag, tgtTag, caps,
+                    dictAvailable, isValidWord, never, always)) continue;
+            if (pick >= 0) return -1;   // two candidates claim the word → ambiguous
+            pick = i;
+        }
+        return pick;
+    }
 
     /// <summary>The verdict logic, ported from the macOS <c>LayoutDetector.decide</c>. Pure: the
     /// dictionary and exception lists are passed in, so it is fully unit-testable. Returns true only

@@ -56,4 +56,32 @@ public class ConverterTests
         var candidates = new List<(string, string)> { ("", "el") };
         Assert.Equal(-1, Converter.PickTargetIndex(candidates, dictAvailable: false, Dict()));
     }
+
+    // --- the manual-trigger cycle (#42) ---
+
+    private static readonly IntPtr En = (IntPtr)1, Ru = (IntPtr)2, El = (IntPtr)3;
+
+    [Fact]
+    public void Cycle_is_picked_then_others_then_original()
+    {
+        var cycle = Converter.BuildCycle(("hello", En),
+            new List<(string, IntPtr)> { ("ηελλο", El) }, ("руддщ", Ru));
+        Assert.Equal(new[] { "hello", "ηελλο", "руддщ" }, cycle.ConvertAll(c => c.text).ToArray());
+    }
+
+    [Fact]
+    public void Cycle_with_two_layouts_is_the_old_toggle()
+    {
+        var cycle = Converter.BuildCycle(("привет", Ru),
+            new List<(string, IntPtr)>(), ("ghbdtn", En));
+        Assert.Equal(new[] { "привет", "ghbdtn" }, cycle.ConvertAll(c => c.text).ToArray());
+    }
+
+    [Fact]
+    public void Cycle_drops_empty_and_duplicate_candidates()
+    {
+        var cycle = Converter.BuildCycle(("hello", En),
+            new List<(string, IntPtr)> { ("", El), ("hello", El), ("руддщ", Ru) }, ("руддщ", Ru));
+        Assert.Equal(new[] { "hello", "руддщ" }, cycle.ConvertAll(c => c.text).ToArray());
+    }
 }

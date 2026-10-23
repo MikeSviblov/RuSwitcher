@@ -45,6 +45,12 @@ public sealed class Settings
     /// correctly typed word doesn't ping-pong. Mirrors the macOS always-convert list.</summary>
     public List<string> AlwaysConvert { get; set; } = new();
 
+    /// <summary>N-layout set (#42): упорядоченный набор раскладок-кандидатов конверсии — полные
+    /// HKL (младшие 32 бита) в порядке приоритета. Пустой список = все установленные раскладки
+    /// в системном порядке (прежнее поведение); набор, из которого установлено меньше двух,
+    /// игнорируется. Пока без UI — правится в settings.json.</summary>
+    public List<long> LayoutSet { get; set; } = new();
+
     /// <summary>issue: per-app layout memory. Maps a process name (e.g. "devenv") to the last layout's
     /// full HKL (low 32 bits, so specific variants like UK vs US English are preserved); restored when
     /// the app regains focus. Off unless <see cref="PerAppLayout"/>.</summary>

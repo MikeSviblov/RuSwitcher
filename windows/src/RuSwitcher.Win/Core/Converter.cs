@@ -11,19 +11,25 @@ namespace RuSwitcher.Win.Core;
 /// </summary>
 internal static class Converter
 {
-    // Last conversion, for reconvert. "_a" is what's currently on screen; "_b" is the alternative.
-    // Each side carries its layout so reconvert also restores the right keyboard layout.
+    // Last AUTO conversion, for reconvert/learn-from-undo. "_a" is what's currently on screen;
+    // "_b" is the alternative. Each side carries its layout so undo restores it too.
     private static string _aText = "";
     private static string _bText = "";
     private static IntPtr _aHkl;
     private static IntPtr _bHkl;
     private static bool _lastWasAuto;   // last conversion came from as-you-type auto (learn-from-undo)
 
+    // Last MANUAL conversion (#42, N-layout set): the full candidate cycle — [picked, остальные
+    // кандидаты, оригинал]. Repeated triggers step through it and wrap around; with two layouts
+    // the cycle is [converted, original] — exactly the old toggle.
+    private static List<(string text, IntPtr hkl)>? _cycle;
+    private static int _cycleIx;
+
     /// <summary>True if the last conversion can be reversed (nothing typed since).</summary>
-    public static bool CanReconvert => _aText.Length > 0;
+    public static bool CanReconvert => _cycle is { Count: >= 2 } || _aText.Length > 0;
 
     /// <summary>Any real typing invalidates a pending reconvert (the word on screen changed).</summary>
-    public static void ClearReconvert() { _aText = ""; _bText = ""; _lastWasAuto = false; }
+    public static void ClearReconvert() { _aText = ""; _bText = ""; _lastWasAuto = false; _cycle = null; }
 
     /// <summary>Record an auto-conversion so the trigger can reverse it — and so reversing it teaches
     /// an exception (learn-from-undo). <paramref name="onScreen"/> is what's now shown; the
@@ -33,6 +39,7 @@ internal static class Converter
         _aText = onScreen; _aHkl = onScreenHkl;
         _bText = alternative; _bHkl = altHkl;
         _lastWasAuto = true;
+        _cycle = null;   // an auto-conversion replaces any pending manual cycle
     }
 
     // Trailing keys whose char in the CURRENT layout is sentence punctuation are kept literally,
@@ -69,7 +76,7 @@ internal static class Converter
         // back to the first non-current layout — byte-identical to the old pair behaviour.
         var hkls = new List<IntPtr>();
         var candidates = new List<(string converted, string langTag)>();
-        foreach (var hkl in LayoutSwitcher.Installed())
+        foreach (var hkl in LayoutSwitcher.ActiveSet())
         {
             if (hkl == sourceHkl) continue;
             hkls.Add(hkl);
@@ -88,11 +95,30 @@ internal static class Converter
         TextInjector.Replace(backspaces: coreCount + suf.Length, text: converted);
         LayoutSwitcher.SwitchTo(targetHkl);
 
-        _aText = converted; _aHkl = targetHkl;   // now on screen
-        _bText = original;  _bHkl = sourceHkl;    // the alternative (undo target)
-        _lastWasAuto = false;                     // a manual convert isn't subject to learn-from-undo
+        // Repeated triggers cycle through the remaining candidates and finally back to the
+        // original (#42); the auto-undo pair does not apply to a manual convert.
+        var others = new List<(string, IntPtr)>(hkls.Count);
+        for (int i = 0; i < hkls.Count; i++)
+            if (i != pick) others.Add((candidates[i].converted + suf, hkls[i]));
+        _cycle = BuildCycle((converted, targetHkl), others, (original, sourceHkl));
+        _cycleIx = 0;
+        _aText = ""; _bText = ""; _lastWasAuto = false;
         buffer.Reset();
         return true;
+    }
+
+    /// <summary>The manual-trigger cycle (#42): picked candidate first, then the remaining
+    /// distinct candidates, then the original — repeated triggers step through and wrap. With
+    /// two layouts this is [converted, original], exactly the old toggle. Pure, for tests.</summary>
+    internal static List<(string text, IntPtr hkl)> BuildCycle((string text, IntPtr hkl) picked,
+        IReadOnlyList<(string text, IntPtr hkl)> others, (string text, IntPtr hkl) original)
+    {
+        var cycle = new List<(string text, IntPtr hkl)> { picked };
+        foreach (var o in others)
+            if (o.text.Length > 0 && o.text != original.text && cycle.All(c => c.text != o.text))
+                cycle.Add(o);
+        cycle.Add(original);
+        return cycle;
     }
 
     /// <summary>Pick the conversion target among the non-current layouts: the FIRST candidate whose
@@ -115,9 +141,20 @@ internal static class Converter
         return -1;
     }
 
-    /// <summary>Reverse the last conversion (and toggle for a repeated trigger).</summary>
+    /// <summary>Repeated trigger: step through the manual candidate cycle, or reverse the last
+    /// auto-conversion (with learn-from-undo).</summary>
     public static bool Reconvert()
     {
+        if (_cycle is { Count: >= 2 } cyc)
+        {
+            var cur = cyc[_cycleIx];
+            _cycleIx = (_cycleIx + 1) % cyc.Count;
+            var next = cyc[_cycleIx];
+            TextInjector.Replace(backspaces: cur.text.Length, text: next.text);
+            LayoutSwitcher.SwitchTo(next.hkl);
+            return true;
+        }
+
         if (_aText.Length == 0) return false;
 
         // Learn-from-undo: reversing an auto-conversion means the user rejected it — remember never to

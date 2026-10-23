@@ -63,7 +63,18 @@ internal static class AutoConverter
 
         // --- soft vetoes (cheap, before the dictionary) ---
         if (typed.Length < 3) return false;                 // 1–2 letters: too many cross-layout collisions
-        if (!typed.All(char.IsLetter)) return false;        // digits / punctuation / URL / code / email
+        // Letter veto, macOS parity (AutoSwitch.decide letter veto + the caller's
+        // trailing-punctuation split): enough that ONE side is all letters — letters living on
+        // punctuation keys make the typed image mixed while the CONVERSION is a clean word
+        // (the Greek tonos dead key: «e;inai»→«είναι»; ЙЦУКЕН's ж: «rf;tncz»→«кажется»).
+        // A TRAILING non-letter stays vetoed: «yt.» may be the abbreviation "yt" + full stop,
+        // not «нею» — the same ambiguity macOS bails on (relaxing it is upstream issue #35).
+        // Digits/URL/code/email keep both sides mixed → still vetoed.
+        if (!typed.All(char.IsLetter))
+        {
+            if (!converted.All(char.IsLetter)) return false;
+            if (!char.IsLetter(typed[^1])) return false;
+        }
         if (!caps)                                          // under Caps Lock these two aren't acronyms/camelCase
         {
             if (IsAllCaps(typed)) return false;             // acronyms

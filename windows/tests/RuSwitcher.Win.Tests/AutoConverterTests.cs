@@ -57,9 +57,59 @@ public class AutoConverterTests
     [Fact]
     public void Keeps_tokens_with_non_letters()
     {
-        // digits / punctuation → URL/code/email territory, never auto-convert.
-        bool r = AutoConverter.ShouldConvertPure("ab12", "фид", "en", "ru",
-            caps: false, dictAvailable: true, Dict(("фид", "ru")), None, None);
+        // digits / punctuation → URL/code/email territory, never auto-convert. Digits render
+        // the same in both layouts, so BOTH sides stay mixed and the letter veto holds.
+        bool r = AutoConverter.ShouldConvertPure("ab12", "фи12", "en", "ru",
+            caps: false, dictAvailable: true, Dict(("фи12", "ru")), None, None);
+        Assert.False(r);
+    }
+
+    [Fact]
+    public void Converts_when_only_the_conversion_is_all_letters()
+    {
+        // macOS letter-veto parity: ЙЦУКЕН's «ж» lives on the «;» key, so the EN image of
+        // correct Russian is mixed while the conversion is a clean word («rf;tncz»→«кажется»).
+        bool r = AutoConverter.ShouldConvertPure("rf;tncz", "кажется", "en", "ru",
+            caps: false, dictAvailable: true, Dict(("кажется", "ru")), None, None);
+        Assert.True(r);
+    }
+
+    [Fact]
+    public void Converts_greek_typed_through_the_tonos_dead_key()
+    {
+        // «e;inai» (EN image of Greek typed with the tonos dead key) → «είναι».
+        bool r = AutoConverter.ShouldConvertPure("e;inai", "είναι", "en", "el",
+            caps: false, dictAvailable: true, Dict(("είναι", "el")), None, None);
+        Assert.True(r);
+    }
+
+    [Fact]
+    public void Keeps_typed_with_trailing_punctuation()
+    {
+        // Trailing non-letter is genuinely ambiguous: «yt.» may be the abbreviation "yt" +
+        // full stop, not «нею» (same bail as the macOS ambiguous-suffix walk; issue #35).
+        bool r = AutoConverter.ShouldConvertPure("yt.", "нею", "en", "ru",
+            caps: false, dictAvailable: true, Dict(("нею", "ru")), None, None);
+        Assert.False(r);
+    }
+
+    [Fact]
+    public void Keeps_greek_question_mark_tail()
+    {
+        // Correct Greek «τι;» (the Greek question mark is a literal «;») — its EN image "tiq"
+        // is no word, and the trailing «;» on the typed side stays vetoed anyway.
+        bool r = AutoConverter.ShouldConvertPure("τι;", "tiq", "el", "en",
+            caps: false, dictAvailable: true, Dict(), None, None);
+        Assert.False(r);
+    }
+
+    [Fact]
+    public void Keeps_accentless_greek_the_speller_rejects()
+    {
+        // Chat-style Greek without tonos: the system speller rejects «ειναι» → stays as typed
+        // (a future el frequency pack may flip this — vector accentless-greek-undecided-today).
+        bool r = AutoConverter.ShouldConvertPure("einai", "ειναι", "en", "el",
+            caps: false, dictAvailable: true, Dict(), None, None);
         Assert.False(r);
     }
 

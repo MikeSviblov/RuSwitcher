@@ -16,7 +16,14 @@ internal static class KeyMapper
     }
 
     /// <summary>Reproduce one key's character in a specific layout, honoring Shift/Caps.</summary>
-    public static char? TranslateIn(TypedKey key, IntPtr hkl)
+    public static char? TranslateIn(TypedKey key, IntPtr hkl) =>
+        TranslateIn(key, hkl, includeDeadKeys: false);
+
+    /// <summary>Like <see cref="TranslateIn(TypedKey, IntPtr)"/>, but with
+    /// <paramref name="includeDeadKeys"/> a dead key yields its SPACING accent (ToUnicodeEx
+    /// returns -1 with the accent in the buffer) instead of being dropped, so
+    /// <see cref="ConvertWord"/> can apply the shared dead-key composition rule (issue #42).</summary>
+    internal static char? TranslateIn(TypedKey key, IntPtr hkl, bool includeDeadKeys)
     {
         var state = new byte[256];
         if (key.Shift) state[0x10] = 0x80;               // VK_SHIFT down
@@ -24,9 +31,11 @@ internal static class KeyMapper
 
         var buf = new char[8];
         // wFlags bit 2 (0x4): do not change the keyboard state (avoids clobbering real dead-key
-        // state). Dead-key edge cases are deferred, mirroring the macOS NoDeadKeys approach.
+        // state) — our fresh key-state array means a base key after a dead key renders plain;
+        // the composition rule in DeadKeys rebuilds the accented form.
         int n = ToUnicodeEx(key.VkCode, key.ScanCode, state, buf, buf.Length, 0x4, hkl);
-        return n >= 1 ? buf[0] : null;
+        if (n >= 1) return buf[0];
+        return includeDeadKeys && n == -1 ? buf[0] : null;
     }
 
     /// <summary>Convert a buffered word into the string it would be in <paramref name="targetHkl"/>.
@@ -36,10 +45,12 @@ internal static class KeyMapper
         var sb = new System.Text.StringBuilder(keys.Count);
         foreach (var k in keys)
         {
-            char? c = TranslateIn(k, targetHkl);
+            char? c = TranslateIn(k, targetHkl, includeDeadKeys: true);
             if (c is { } ch) sb.Append(ch);
         }
-        return sb.ToString();
+        // Dead keys render as spacing accents; attach them to the next base char + NFC
+        // («e;inai» через греческую раскладку → «είναι»).
+        return DeadKeys.Compose(sb.ToString());
     }
 
     // Character-producing keys (digits, letters, OEM punctuation) — the Windows analog of the
